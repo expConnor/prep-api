@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+*.tsbuildinfo
+
+# generated Prisma client
+src/generated/
+
+# env (.env.test holds only local throwaway credentials and is committed)
+.env
+.env.*.local
+
+# test output
+coverage/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+notes
