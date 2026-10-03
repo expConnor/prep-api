@@ -43,10 +43,10 @@ A **purchase request** is an internal "may I spend this?" record. It comes befor
 
 **Entities**
 
-- **Tenant:** id, name
-- **User:** id, tenantId, email, name, passwordHash, role
+- **Tenant:** id, slug (unique; identifies the tenant at login), name
+- **User:** id, tenantId, email (lowercase, unique within the tenant), name, passwordHash, role
 - **PurchaseRequest:** id, tenantId, requesterId, title, description, vendor, amount, currency, status, rejectionReason, decidedById, submittedAt, decidedAt, createdAt, updatedAt
-- **AuditLogEntry:** id, tenantId, actorId, action, entityType, entityId, changes (before/after), createdAt
+- **AuditLogEntry:** id, tenantId, actorId, action, entityType, entityId (no foreign key, so history outlives deleted drafts), changes (before/after), createdAt
 
 ## 4. Request lifecycle
 
@@ -81,7 +81,7 @@ The API is REST and JSON, versioned under `/api/v1`.
 
 | Area              | Capabilities                                                                                  |
 | ----------------- | --------------------------------------------------------------------------------------------- |
-| Auth              | Log in to get a token; get the current user                                                   |
+| Auth              | Log in with tenant slug, email and password to get a token; get the current user              |
 | Purchase requests | Create, list, view, edit (draft), delete (draft)                                              |
 | Transitions       | Submit, approve and reject, each as its own action endpoint rather than a status field update |
 | Audit             | View the history of one request; admins can browse the whole tenant's log                     |

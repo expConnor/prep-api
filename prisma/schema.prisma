@@ -1,5 +1,12 @@
-// Domain models (Tenant, User, PurchaseRequest, AuditLogEntry) are added in
-// the first build step; see SPEC.md §3.
+// Every tenant-owned row carries tenantId, and relations to User use composite
+// foreign keys on (tenantId, userId) so the database itself refuses links
+// across tenants. Because tenantId is shared by several relations, write rows
+// with scalar ids (`data: { tenantId, requesterId }`) rather than nested
+// `connect`.
+//
+// CHECK constraints (amount > 0, currency format, status consistency, no
+// self-decision, lowercase email and slug) live in the init migration's SQL,
+// since Prisma can't express them.
 
 generator client {
   provider            = "prisma-client"
@@ -10,4 +17,117 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum Role {
+  REQUESTER
+  APPROVER
+  ADMIN
+}
+
+enum PurchaseRequestStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum AuditEntityType {
+  PURCHASE_REQUEST
+  USER
+}
+
+enum AuditAction {
+  PURCHASE_REQUEST_CREATED
+  PURCHASE_REQUEST_UPDATED
+  PURCHASE_REQUEST_DELETED
+  PURCHASE_REQUEST_SUBMITTED
+  PURCHASE_REQUEST_APPROVED
+  PURCHASE_REQUEST_REJECTED
+  USER_CREATED
+  USER_ROLE_CHANGED
+}
+
+model Tenant {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  // Identifies the tenant at login, since emails are only unique per tenant.
+  slug      String   @unique
+  name      String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  users            User[]
+  purchaseRequests PurchaseRequest[]
+  auditLogEntries  AuditLogEntry[]
+}
+
+model User {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  tenantId     String   @db.Uuid
+  // Stored lowercased so uniqueness and login lookups are case-insensitive.
+  email        String
+  name         String
+  passwordHash String
+  role         Role     @default(REQUESTER)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  purchaseRequests PurchaseRequest[] @relation("Requester")
+  decidedRequests  PurchaseRequest[] @relation("DecidedBy")
+  auditLogEntries  AuditLogEntry[]
+
+  @@unique([tenantId, email])
+  // Target of the composite foreign keys from other tables.
+  @@unique([tenantId, id])
+}
+
+model PurchaseRequest {
+  id              String                @id @default(uuid(7)) @db.Uuid
+  tenantId        String                @db.Uuid
+  requesterId     String                @db.Uuid
+  title           String
+  description     String?
+  vendor          String
+  // Minor units (e.g. cents) so arithmetic is exact.
+  amount          Int
+  // ISO 4217 code, e.g. EUR.
+  currency        String                @db.Char(3)
+  status          PurchaseRequestStatus @default(DRAFT)
+  rejectionReason String?
+  decidedById     String?               @db.Uuid
+  submittedAt     DateTime?             @db.Timestamptz(3)
+  decidedAt       DateTime?             @db.Timestamptz(3)
+  createdAt       DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime              @updatedAt @db.Timestamptz(3)
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  requester User   @relation("Requester", fields: [tenantId, requesterId], references: [tenantId, id], onDelete: Restrict)
+  decidedBy User?  @relation("DecidedBy", fields: [tenantId, decidedById], references: [tenantId, id], onDelete: Restrict)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, requesterId, createdAt])
+  @@index([tenantId, amount])
+  @@index([tenantId, vendor])
+}
+
+model AuditLogEntry {
+  id         String          @id @default(uuid(7)) @db.Uuid
+  tenantId   String          @db.Uuid
+  actorId    String          @db.Uuid
+  action     AuditAction
+  entityType AuditEntityType
+  // No foreign key: it points at different tables depending on entityType,
+  // and history must outlive deleted drafts.
+  entityId   String          @db.Uuid
+  // { before, after } snapshots of the entity; null on the side that didn't exist.
+  changes    Json
+  createdAt  DateTime        @default(now()) @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  actor  User   @relation(fields: [tenantId, actorId], references: [tenantId, id], onDelete: Restrict)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, entityType, entityId, createdAt])
 }
