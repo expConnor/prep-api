@@ -49,6 +49,7 @@ Build only what the current task needs. No speculative abstractions, generic hel
 Prefer the well-known, conventional solution over the clever one.
 
 - Use NestJS and Prisma the way their docs show: modules, controllers, services, DTOs with `class-validator`, `prisma.$transaction`.
+- You can look up library and framework docs (NestJS, Prisma, Vitest, class-validator, etc.) with the context7 MCP server before writing or changing code that uses them. These versions are recent and their APIs differ from older releases.
 - Generate Nest pieces with the Nest CLI (`npx nest g module|controller|service <name>`) so files match the standard layout.
 - Do not add a dependency without asking first. Standard library and existing deps come first.
 - No custom frameworks, metaprogramming or novel patterns when a plain one works.
@@ -59,7 +60,7 @@ Every doc, comment and README section must stand on its own. Do not cross-refere
 
 - State the fact where it is needed, briefly, instead of pointing to where it lives.
 - When you change behaviour, update the docs and comments that describe it in the same change.
-- Code comments explain *why*, not *what*, and never point to external documents.
+- Code comments explain _why_, not _what_, and never point to external documents.
 
 ## Code conventions
 
