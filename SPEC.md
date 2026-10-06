@@ -135,7 +135,7 @@ Filters always apply on top of the caller's visibility rules.
 ## 9. Architecture
 
 - Feature modules: auth, users, purchase requests and audit, plus shared Prisma and common modules.
-- Auth is applied globally, so every route requires a token unless it's explicitly marked public.
+- Auth is opt-in per handler: every protected handler is marked `@UseGuards(AuthGuard)`, which checks the bearer token and loads the current user. Only health and login are left unguarded.
 - Permission and transition rules live in **pure functions**, separate from controllers and the database, so they're easy to unit-test.
 - Writes and their audit entries share one database transaction.
 - Input is validated at the edge with DTOs; unknown fields are rejected.

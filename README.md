@@ -29,6 +29,36 @@ npm run db:deploy      # apply migrations to the dev database
 npm run start:dev      # http://localhost:3000/api/v1/health
 ```
 
+## Environment
+
+Copy `.env.example` to `.env`. The e2e tests read `.env.test` instead.
+
+| Variable       | What it is                                                                   |
+| -------------- | ---------------------------------------------------------------------------- |
+| `PORT`         | Port the API listens on (default 3000)                                       |
+| `DATABASE_URL` | PostgreSQL connection string                                                 |
+| `JWT_SECRET`   | Secret that signs access tokens; use a long random value outside development |
+
+## Authentication
+
+Log in with the tenant slug, email and password. The email is matched case-insensitively. Every login failure returns the same 401, so it doesn't reveal whether the tenant, email or password was wrong.
+
+```sh
+curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"tenantSlug":"acme","email":"alice@acme.test","password":"secret"}'
+# {"accessToken":"eyJ..."}
+```
+
+Send the token as a bearer token. It expires after one hour.
+
+```sh
+curl http://localhost:3000/api/v1/auth/me -H 'Authorization: Bearer eyJ...'
+# {"id":"...","tenantId":"...","email":"alice@acme.test","name":"Alice","role":"APPROVER"}
+```
+
+The user is reloaded on every request, so a deleted user is locked out and a role change applies straight away. A missing, invalid or expired token gets a 401. Protected handlers opt in with `@UseGuards(AuthGuard)`; `/health` and `/auth/login` are public.
+
 ## Scripts
 
 | Script               | What it does                                        |
