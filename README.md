@@ -26,8 +26,20 @@ Then:
 cp .env.example .env
 npm install            # also runs `prisma generate`
 npm run db:deploy      # apply migrations to the dev database
+npm run db:seed        # add the development tenants and users
 npm run start:dev      # http://localhost:3000/api/v1/health
 ```
+
+## Seed data
+
+`npm run db:seed` creates two tenants with one user of each role. Every seeded user has the password `password`.
+
+| Tenant slug | Requester               | Approver               | Admin               |
+| ----------- | ----------------------- | ---------------------- | ------------------- |
+| `acme`      | `requester@acme.test`   | `approver@acme.test`   | `admin@acme.test`   |
+| `globex`    | `requester@globex.test` | `approver@globex.test` | `admin@globex.test` |
+
+The seed only adds what is missing, so it is safe to run again and leaves other data alone.
 
 ## Environment
 
@@ -46,7 +58,7 @@ Log in with the tenant slug, email and password. The email is matched case-insen
 ```sh
 curl -X POST http://localhost:3000/api/v1/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"tenantSlug":"acme","email":"alice@acme.test","password":"secret"}'
+  -d '{"tenantSlug":"acme","email":"approver@acme.test","password":"password"}'
 # {"accessToken":"eyJ..."}
 ```
 
@@ -54,7 +66,7 @@ Send the token as a bearer token. It expires after one hour.
 
 ```sh
 curl http://localhost:3000/api/v1/auth/me -H 'Authorization: Bearer eyJ...'
-# {"id":"...","tenantId":"...","email":"alice@acme.test","name":"Alice","role":"APPROVER"}
+# {"id":"...","tenantId":"...","email":"approver@acme.test","name":"Acme Approver","role":"APPROVER"}
 ```
 
 The user is reloaded on every request, so a deleted user is locked out and a role change applies straight away. A missing, invalid or expired token gets a 401. Protected handlers opt in with `@UseGuards(AuthGuard)`; `/health` and `/auth/login` are public.
@@ -69,6 +81,7 @@ The user is reloaded on every request, so a deleted user is locked out and a rol
 | `npm run test:e2e`   | E2E tests (`*.e2e-spec.ts`) against `prep_api_test` |
 | `npm run db:migrate` | Create and apply a migration in development         |
 | `npm run db:deploy`  | Apply pending migrations                            |
+| `npm run db:seed`    | Add the development tenants and users               |
 | `npm run lint`       | Lint with oxlint                                    |
 
 The e2e run loads `.env.test` and applies migrations to the test database before the suite starts.

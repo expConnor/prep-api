@@ -15,6 +15,7 @@ npm run test:e2e            # e2e tests (*.e2e-spec.ts) against prep_api_test; n
 npm run check               # typecheck, lint, format, unit and e2e — run before calling work done
 npm run db:migrate          # create and apply a migration after editing prisma/schema.prisma
 npm run prisma:generate     # then regenerate the client; Prisma 7 migrate no longer does it
+npm run db:seed             # add dev tenants acme and globex, one user per role, password "password"
 
 npx vitest run src/path/to/file.spec.ts                                   # one unit test file
 npx vitest run --config ./vitest.config.e2e.ts test/some.e2e-spec.ts      # one e2e file
