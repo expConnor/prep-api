@@ -34,6 +34,7 @@
     "@nestjs/core": "^12.0.1",
     "@nestjs/jwt": "^12.0.2",
     "@nestjs/platform-express": "^12.0.1",
+    "@nestjs/swagger": "^12.0.2",
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
     "class-transformer": "^0.5.1",
@@ -64,7 +65,8 @@
   "allowScripts": {
     "@prisma/engines@7.10.0": true,
     "prisma@7.10.0": true,
-    "fsevents": false
+    "fsevents": false,
+    "@scarf/scarf": false
   },
   "engines": {
     "node": ">=22"
