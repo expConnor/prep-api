@@ -1,6 +1,6 @@
 # prep-api
 
-Purchase Requests API. See [SPEC.md](SPEC.md) for scope, domain and architecture.
+A multi-tenant Purchase Requests API: employees ask for approval to spend money, and approvers approve or reject those requests. Every change is recorded in an audit log.
 
 **Stack:** NestJS 12 (ESM) · PostgreSQL 18 · Prisma 7 · Vitest
 
@@ -133,6 +133,17 @@ curl -X POST http://localhost:3000/api/v1/users \
   -H 'Authorization: Bearer eyJ...' -H 'Content-Type: application/json' \
   -d '{"email":"nina@acme.test","name":"Nina","password":"correct horse","role":"APPROVER"}'
 ```
+
+## Audit log
+
+Every change to a purchase request or user is recorded with the actor, the action, the entity and `{ before, after }` snapshots in `changes` (`null` on the side that didn't exist). Entries outlive deleted drafts.
+
+| Endpoint                           | What it does                                                            |
+| ---------------------------------- | ----------------------------------------------------------------------- |
+| `GET /purchase-requests/:id/audit` | One request's history, oldest first, for anyone who can see the request |
+| `GET /audit-logs`                  | The whole tenant's log, newest first (admins only)                      |
+
+`GET /audit-logs` returns `{ items, total, page, limit }` and takes optional `page` (from 1, default 1) and `limit` (1 to 100, default 20). Requesters and approvers get 403, and only the caller's tenant is ever shown.
 
 ## Scripts
 
