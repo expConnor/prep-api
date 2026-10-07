@@ -71,6 +71,25 @@ curl http://localhost:3000/api/v1/auth/me -H 'Authorization: Bearer eyJ...'
 
 The user is reloaded on every request, so a deleted user is locked out and a role change applies straight away. A missing, invalid or expired token gets a 401. Protected handlers opt in with `@UseGuards(AuthGuard)`; `/health` and `/auth/login` are public.
 
+## Purchase requests
+
+Every endpoint needs a bearer token and only ever touches the caller's tenant.
+
+| Endpoint                     | What it does                       |
+| ---------------------------- | ---------------------------------- |
+| `POST /purchase-requests`    | Create a draft owned by the caller |
+| `GET /purchase-requests/:id` | Get one request                    |
+
+`amount` is an integer in minor units (cents for EUR) and `currency` an uppercase ISO 4217 code:
+
+```sh
+curl -X POST http://localhost:3000/api/v1/purchase-requests \
+  -H 'Authorization: Bearer eyJ...' -H 'Content-Type: application/json' \
+  -d '{"title":"Laptop","vendor":"Dell","amount":129900,"currency":"EUR"}'
+```
+
+Drafts are visible only to their owner. Requesters see only their own requests; approvers and admins also see everyone else's submitted, approved and rejected ones. A request the caller can't see, including one in another tenant, returns 404 as if it didn't exist. Every change is written to the audit log in the same transaction.
+
 ## Scripts
 
 | Script               | What it does                                        |

@@ -42,6 +42,8 @@ describe('Swagger (e2e)', () => {
       '/api/v1/auth/login',
       '/api/v1/auth/me',
       '/api/v1/health',
+      '/api/v1/purchase-requests',
+      '/api/v1/purchase-requests/{id}',
     ]);
   });
 
@@ -78,5 +80,41 @@ describe('Swagger (e2e)', () => {
     expect(
       Object.keys(doc.paths['/api/v1/auth/me'].get.responses).sort(),
     ).toEqual(['200', '401']);
+  });
+
+  it('documents the purchase-request endpoints and their errors', async () => {
+    const doc = await openApiDocument();
+    const responses = (path: string, method: string) =>
+      Object.keys(doc.paths[`/api/v1${path}`][method].responses).sort();
+
+    expect(responses('/purchase-requests', 'post')).toEqual([
+      '201',
+      '400',
+      '401',
+    ]);
+    expect(responses('/purchase-requests/{id}', 'get')).toEqual([
+      '200',
+      '400',
+      '401',
+      '404',
+    ]);
+    expect(doc.paths['/api/v1/purchase-requests'].post.security).toEqual([
+      { bearer: [] },
+    ]);
+  });
+
+  it('documents the purchase-request body fields', async () => {
+    const doc = await openApiDocument();
+
+    expect(doc.components.schemas.CreatePurchaseRequestDto).toMatchObject({
+      required: ['title', 'vendor', 'amount', 'currency'],
+      properties: {
+        title: { type: 'string' },
+        description: { type: 'string' },
+        vendor: { type: 'string' },
+        amount: { type: 'integer' },
+        currency: { type: 'string' },
+      },
+    });
   });
 });
