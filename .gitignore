@@ -21,3 +21,6 @@ coverage/
 .vscode/
 
 notes
+
+# local scratch files such as handoff notes
+tmp/
