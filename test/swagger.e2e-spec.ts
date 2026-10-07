@@ -39,6 +39,7 @@ describe('Swagger (e2e)', () => {
     const doc = await openApiDocument();
 
     expect(Object.keys(doc.paths).sort()).toEqual([
+      '/api/v1/audit-logs',
       '/api/v1/auth/login',
       '/api/v1/auth/me',
       '/api/v1/health',

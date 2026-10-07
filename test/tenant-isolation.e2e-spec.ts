@@ -91,6 +91,17 @@ describe('Tenant isolation (e2e)', () => {
         submittedAt: new Date(),
       },
     });
+    // Gives the audit log endpoints acme data that could leak.
+    await prisma.auditLogEntry.create({
+      data: {
+        tenantId: acme,
+        actorId: rita.id,
+        action: 'PURCHASE_REQUEST_SUBMITTED',
+        entityType: 'PURCHASE_REQUEST',
+        entityId: submitted.id,
+        changes: { before: null, after: submitted },
+      },
+    });
   });
 
   afterAll(async () => {
@@ -148,6 +159,7 @@ describe('Tenant isolation (e2e)', () => {
       expect.arrayContaining([
         'post /purchase-requests/{id}/approve',
         'patch /users/{id}/role',
+        'get /audit-logs',
       ]),
     );
     expect(
