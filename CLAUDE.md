@@ -77,6 +77,7 @@ Every doc, comment and README section must stand on its own. Do not cross-refere
 ## Domain rules that every change must respect
 
 - **Tenant isolation:** the tenant always comes from the authenticated user, never from client input. Every query is scoped by `tenantId`.
+  `test/tenant-isolation.e2e-spec.ts` calls every guarded endpoint in the Swagger document as another tenant's admin and expects 404 for `{id}` routes and no foreign data in any response. A new resource with `{id}` routes needs a fixture id there, and a new endpoint that takes a body needs a valid body there.
 - **Hidden vs forbidden:** a resource the caller cannot see (other tenant, someone else's draft) returns 404. A visible resource the caller may not act on returns 403.
 - **Lifecycle:** `DRAFT → SUBMITTED → APPROVED | REJECTED`. Only drafts can be edited or deleted, only by their owner. Approved and rejected are final. Any other transition is refused.
 - **Separation of duties:** nobody approves or rejects their own request. Rejection requires a reason.
