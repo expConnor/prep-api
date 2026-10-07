@@ -602,4 +602,66 @@ describe('Purchase requests (e2e)', () => {
       throw new Error(`Expected ${count} queries waiting on a lock`);
     }
   });
+
+  describe('GET /purchase-requests/:id/audit', () => {
+    it('returns the full lifecycle, oldest first', async () => {
+      const created = (
+        await as(rita).post('/purchase-requests', validBody).expect(201)
+      ).body;
+      const path = `/purchase-requests/${created.id}`;
+      await as(rita).patch(path, { amount: 99900 }).expect(200);
+      await as(rita).post(`${path}/submit`).expect(200);
+      await as(abe).post(`${path}/approve`).expect(200);
+
+      const res = await as(abe).get(`${path}/audit`).expect(200);
+
+      expect(
+        res.body.map((entry: { action: string; actorId: string }) => [
+          entry.action,
+          entry.actorId,
+        ]),
+      ).toEqual([
+        ['PURCHASE_REQUEST_CREATED', rita.id],
+        ['PURCHASE_REQUEST_UPDATED', rita.id],
+        ['PURCHASE_REQUEST_SUBMITTED', rita.id],
+        ['PURCHASE_REQUEST_APPROVED', abe.id],
+      ]);
+      expect(res.body[3]).toMatchObject({
+        entityType: 'PURCHASE_REQUEST',
+        entityId: created.id,
+        changes: {
+          before: { status: 'SUBMITTED' },
+          after: { status: 'APPROVED', decidedById: abe.id },
+        },
+        createdAt: expect.any(String),
+      });
+    });
+
+    it('shows the owner the history of their own draft', async () => {
+      const created = (
+        await as(rita).post('/purchase-requests', validBody).expect(201)
+      ).body;
+
+      const res = await as(rita)
+        .get(`/purchase-requests/${created.id}/audit`)
+        .expect(200);
+
+      expect(res.body).toHaveLength(1);
+    });
+
+    it.each([
+      ['an approver', 'abe', 'DRAFT'],
+      ['another requester', 'rob', 'SUBMITTED'],
+      ['another tenant', 'gus', 'SUBMITTED'],
+    ] as const)(
+      'hides the history from %s who cannot see the request',
+      async (_, name, status) => {
+        const hidden = await createRequest(rita, status);
+
+        await as({ abe, rob, gus }[name])
+          .get(`/purchase-requests/${hidden.id}/audit`)
+          .expect(404);
+      },
+    );
+  });
 });

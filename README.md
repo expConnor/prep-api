@@ -79,6 +79,7 @@ Every endpoint needs a bearer token and only ever touches the caller's tenant.
 | ------------------------------------- | ------------------------------------------------------------------ |
 | `POST /purchase-requests`             | Create a draft owned by the caller                                 |
 | `GET /purchase-requests/:id`          | Get one request                                                    |
+| `GET /purchase-requests/:id/audit`    | The request's audit history, oldest first                          |
 | `PATCH /purchase-requests/:id`        | Edit your own draft; `description: null` clears it                 |
 | `DELETE /purchase-requests/:id`       | Delete your own draft                                              |
 | `POST /purchase-requests/:id/submit`  | Submit your own draft for approval                                 |

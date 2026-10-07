@@ -45,6 +45,7 @@ describe('Swagger (e2e)', () => {
       '/api/v1/purchase-requests',
       '/api/v1/purchase-requests/{id}',
       '/api/v1/purchase-requests/{id}/approve',
+      '/api/v1/purchase-requests/{id}/audit',
       '/api/v1/purchase-requests/{id}/reject',
       '/api/v1/purchase-requests/{id}/submit',
     ]);
@@ -95,12 +96,12 @@ describe('Swagger (e2e)', () => {
       '400',
       '401',
     ]);
-    expect(responses('/purchase-requests/{id}', 'get')).toEqual([
-      '200',
-      '400',
-      '401',
-      '404',
-    ]);
+    for (const path of [
+      '/purchase-requests/{id}',
+      '/purchase-requests/{id}/audit',
+    ]) {
+      expect(responses(path, 'get')).toEqual(['200', '400', '401', '404']);
+    }
     for (const method of ['patch', 'delete']) {
       expect(responses('/purchase-requests/{id}', method)).toEqual([
         method === 'patch' ? '200' : '204',

@@ -63,6 +63,23 @@ export class PurchaseRequestsController {
     return this.service.findOne(user, id);
   }
 
+  @Get(':id/audit')
+  @ApiOperation({ summary: "Get a purchase request's audit history" })
+  @ApiOkResponse({
+    description:
+      'Returns the audit entries, oldest first, each with `{ before, after }` snapshots in `changes`',
+  })
+  @ApiBadRequestResponse({ description: 'The id is not a UUID' })
+  @ApiNotFoundResponse({
+    description: "Doesn't exist, or the caller can't see it",
+  })
+  history(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.service.history(user, id);
+  }
+
   @Patch(':id')
   @ApiOperation({ summary: 'Edit your own draft' })
   @ApiOkResponse({ description: 'Returns the updated request' })

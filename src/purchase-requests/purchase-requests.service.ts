@@ -46,6 +46,18 @@ export class PurchaseRequestsService {
     return findVisible(this.prisma, user, id);
   }
 
+  async history(user: AuthUser, id: string) {
+    await findVisible(this.prisma, user, id);
+    return this.prisma.auditLogEntry.findMany({
+      where: {
+        tenantId: user.tenantId,
+        entityType: 'PURCHASE_REQUEST',
+        entityId: id,
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+  }
+
   update(user: AuthUser, id: string, body: UpdatePurchaseRequestDto) {
     return this.change(user, id, 'edit', 'PURCHASE_REQUEST_UPDATED', body);
   }
