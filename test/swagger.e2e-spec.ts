@@ -48,6 +48,8 @@ describe('Swagger (e2e)', () => {
       '/api/v1/purchase-requests/{id}/audit',
       '/api/v1/purchase-requests/{id}/reject',
       '/api/v1/purchase-requests/{id}/submit',
+      '/api/v1/users',
+      '/api/v1/users/{id}/role',
     ]);
   });
 
@@ -148,6 +150,42 @@ describe('Swagger (e2e)', () => {
     expect(doc.components.schemas.RejectPurchaseRequestDto).toMatchObject({
       required: ['reason'],
       properties: { reason: { type: 'string' } },
+    });
+  });
+
+  it('documents the user endpoints, their errors and body fields', async () => {
+    const doc = await openApiDocument();
+    const responses = (path: string, method: string) =>
+      Object.keys(doc.paths[`/api/v1${path}`][method].responses).sort();
+
+    expect(responses('/users', 'get')).toEqual(['200', '401', '403']);
+    expect(responses('/users', 'post')).toEqual([
+      '201',
+      '400',
+      '401',
+      '403',
+      '409',
+    ]);
+    expect(responses('/users/{id}/role', 'patch')).toEqual([
+      '200',
+      '400',
+      '401',
+      '403',
+      '404',
+    ]);
+    expect(doc.paths['/api/v1/users'].get.security).toEqual([{ bearer: [] }]);
+    expect(doc.components.schemas.CreateUserDto).toMatchObject({
+      required: ['email', 'name', 'password', 'role'],
+      properties: {
+        email: { type: 'string' },
+        name: { type: 'string' },
+        password: { type: 'string' },
+        role: { enum: ['REQUESTER', 'APPROVER', 'ADMIN'] },
+      },
+    });
+    expect(doc.components.schemas.ChangeRoleDto).toMatchObject({
+      required: ['role'],
+      properties: { role: { enum: ['REQUESTER', 'APPROVER', 'ADMIN'] } },
     });
   });
 });

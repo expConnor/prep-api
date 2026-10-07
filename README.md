@@ -114,6 +114,26 @@ Filters only narrow what you can already see, so filtering by `status=DRAFT` nev
 
 A request moves `DRAFT → SUBMITTED → APPROVED | REJECTED`, and approved and rejected are final. Nobody can approve or reject their own request (403). Any other transition returns 409, including the loser when two people decide the same request at once. Every change is written to the audit log in the same transaction.
 
+## Users
+
+Only admins can manage users, and only in their own tenant. Requesters and approvers get 403.
+
+| Endpoint                | What it does                                         |
+| ----------------------- | ---------------------------------------------------- |
+| `GET /users`            | List the tenant's users, ordered by email            |
+| `POST /users`           | Create a user with `{ email, name, password, role }` |
+| `PATCH /users/:id/role` | Change someone else's role with `{ role }`           |
+
+`role` is `REQUESTER`, `APPROVER` or `ADMIN`. The admin sets the new user's initial password, which must be at least 8 characters. The email is stored in lowercase, and an email already used in the same tenant returns 409. The same email may exist in another tenant.
+
+An admin can't change their own role (403), so a tenant always keeps at least one admin. A user in another tenant returns 404. A role change applies to the user's next request, even with a token issued before the change. Password hashes never appear in responses or the audit log, and every create and role change is written to the audit log in the same transaction.
+
+```sh
+curl -X POST http://localhost:3000/api/v1/users \
+  -H 'Authorization: Bearer eyJ...' -H 'Content-Type: application/json' \
+  -d '{"email":"nina@acme.test","name":"Nina","password":"correct horse","role":"APPROVER"}'
+```
+
 ## Scripts
 
 | Script               | What it does                                        |
