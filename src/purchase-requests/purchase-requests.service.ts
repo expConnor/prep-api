@@ -12,7 +12,9 @@ import type {
 } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreatePurchaseRequestDto } from './dto/create-purchase-request.dto.js';
+import { ListPurchaseRequestsQuery } from './dto/list-purchase-requests.query.js';
 import { UpdatePurchaseRequestDto } from './dto/update-purchase-request.dto.js';
+import { listArgs } from './purchase-request.list.js';
 import { type Action, canSee, checkAction } from './purchase-request.policy.js';
 
 type Tx = Prisma.TransactionClient;
@@ -40,6 +42,16 @@ export class PurchaseRequestsService {
       });
       return created;
     });
+  }
+
+  async list(user: AuthUser, query: ListPurchaseRequestsQuery) {
+    const { where, orderBy, skip, take } = listArgs(user, query);
+    // One transaction so the total counts the same rows the page comes from.
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.purchaseRequest.findMany({ where, orderBy, skip, take }),
+      this.prisma.purchaseRequest.count({ where }),
+    ]);
+    return { items, total, page: query.page, limit: query.limit };
   }
 
   findOne(user: AuthUser, id: string) {

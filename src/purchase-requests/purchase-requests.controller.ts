@@ -8,6 +8,7 @@ import {
   Patch,
   ParseUUIDPipe,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -26,6 +27,7 @@ import {
 import { AuthGuard, type AuthUser } from '../auth/auth.guard.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { CreatePurchaseRequestDto } from './dto/create-purchase-request.dto.js';
+import { ListPurchaseRequestsQuery } from './dto/list-purchase-requests.query.js';
 import { RejectPurchaseRequestDto } from './dto/reject-purchase-request.dto.js';
 import { UpdatePurchaseRequestDto } from './dto/update-purchase-request.dto.js';
 import { PurchaseRequestsService } from './purchase-requests.service.js';
@@ -47,6 +49,21 @@ export class PurchaseRequestsController {
     @Body() body: CreatePurchaseRequestDto,
   ) {
     return this.service.create(user, body);
+  }
+
+  @Get()
+  @ApiOperation({
+    summary: 'List the purchase requests the caller can see',
+    description:
+      "Requesters see their own requests; approvers and admins also see other people's non-draft requests. Filters narrow that set.",
+  })
+  @ApiOkResponse({ description: 'Returns `{ items, total, page, limit }`' })
+  @ApiBadRequestResponse({ description: 'Invalid or unknown query parameters' })
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query() query: ListPurchaseRequestsQuery,
+  ) {
+    return this.service.list(user, query);
   }
 
   @Get(':id')

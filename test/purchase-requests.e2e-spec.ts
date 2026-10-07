@@ -94,10 +94,20 @@ describe('Purchase requests (e2e)', () => {
     };
   }
 
-  function createRequest(owner: User, status: PurchaseRequestStatus = 'DRAFT') {
+  function createRequest(
+    owner: User,
+    status: PurchaseRequestStatus = 'DRAFT',
+    overrides: {
+      title?: string;
+      vendor?: string;
+      amount?: number;
+      createdAt?: Date;
+    } = {},
+  ) {
     return prisma.purchaseRequest.create({
       data: {
         ...validBody,
+        ...overrides,
         tenantId: owner.tenantId,
         requesterId: owner.id,
         status,
@@ -663,5 +673,159 @@ describe('Purchase requests (e2e)', () => {
           .expect(404);
       },
     );
+  });
+
+  describe('GET /purchase-requests', () => {
+    // A tenant of its own, so the other tests' requests don't show up here.
+    let ivy: User;
+    let ian: User;
+    let ike: User;
+    let ida: User;
+    let desk: string;
+    let laptop: string;
+    let monitor: string;
+    let chair: string;
+
+    beforeAll(async () => {
+      const initech = (
+        await prisma.tenant.create({
+          data: { slug: 'initech', name: 'Initech' },
+        })
+      ).id;
+      ivy = await createUser(initech, 'ivy', 'REQUESTER');
+      ian = await createUser(initech, 'ian', 'REQUESTER');
+      ike = await createUser(initech, 'ike', 'APPROVER');
+      ida = await createUser(initech, 'ida', 'ADMIN');
+
+      const at = (minute: number) => new Date(Date.UTC(2026, 0, 1, 9, minute));
+      desk = (
+        await createRequest(ivy, 'DRAFT', {
+          title: 'Standing desk',
+          vendor: 'IKEA',
+          amount: 30000,
+          createdAt: at(1),
+        })
+      ).id;
+      laptop = (
+        await createRequest(ivy, 'SUBMITTED', {
+          title: 'Laptop',
+          vendor: 'Dell',
+          amount: 150000,
+          createdAt: at(2),
+        })
+      ).id;
+      monitor = (
+        await createRequest(ian, 'SUBMITTED', {
+          title: 'Dell monitor',
+          vendor: 'Dell Technologies',
+          amount: 40000,
+          createdAt: at(3),
+        })
+      ).id;
+      chair = (
+        await createRequest(ian, 'SUBMITTED', {
+          title: 'Office chair',
+          vendor: 'DELL',
+          amount: 60000,
+          createdAt: at(4),
+        })
+      ).id;
+      await createRequest(ian, 'DRAFT', {
+        title: 'Keyboard',
+        vendor: 'Logitech',
+        amount: 5000,
+        createdAt: at(5),
+      });
+    });
+
+    async function ids(user: User, query = '') {
+      const res = await as(user).get(`/purchase-requests${query}`).expect(200);
+      return res.body.items.map((item: { id: string }) => item.id);
+    }
+
+    it('shows a requester only their own requests, newest first', async () => {
+      expect(await ids(ivy)).toEqual([laptop, desk]);
+    });
+
+    it.each([
+      ['an approver', 'ike'],
+      ['an admin', 'ida'],
+    ] as const)(
+      "shows %s other people's requests but not their drafts",
+      async (_, name) => {
+        expect(await ids({ ike, ida }[name])).toEqual([chair, monitor, laptop]);
+      },
+    );
+
+    it("never shows another tenant's requests", async () => {
+      const res = await as(gus).get('/purchase-requests').expect(200);
+
+      expect(res.body).toEqual({ items: [], total: 0, page: 1, limit: 20 });
+    });
+
+    it("doesn't reveal other people's drafts when filtering by status", async () => {
+      expect(await ids(ike, '?status=DRAFT')).toEqual([]);
+      expect(await ids(ivy, '?status=DRAFT')).toEqual([desk]);
+    });
+
+    it('filters by requester within what the caller can see', async () => {
+      expect(await ids(ike, `?requesterId=${ian.id}`)).toEqual([
+        chair,
+        monitor,
+      ]);
+      expect(await ids(ivy, `?requesterId=${ian.id}`)).toEqual([]);
+    });
+
+    it('filters by whole vendor name in any case', async () => {
+      expect(await ids(ike, '?vendor=dell')).toEqual([chair, laptop]);
+    });
+
+    it('searches titles in any case', async () => {
+      expect(await ids(ike, '?q=DELL')).toEqual([monitor]);
+    });
+
+    it('sorts by amount', async () => {
+      expect(await ids(ike, '?sort=amount&order=asc')).toEqual([
+        monitor,
+        chair,
+        laptop,
+      ]);
+      expect(await ids(ike, '?sort=amount')).toEqual([laptop, chair, monitor]);
+    });
+
+    it('sorts oldest first', async () => {
+      expect(await ids(ike, '?order=asc')).toEqual([laptop, monitor, chair]);
+    });
+
+    it('pages through the results with a total count', async () => {
+      const first = await as(ike).get('/purchase-requests?limit=2').expect(200);
+      const second = await as(ike)
+        .get('/purchase-requests?limit=2&page=2')
+        .expect(200);
+
+      expect(first.body).toMatchObject({ total: 3, page: 1, limit: 2 });
+      expect(first.body.items.map((item: { id: string }) => item.id)).toEqual([
+        chair,
+        monitor,
+      ]);
+      expect(second.body).toMatchObject({ total: 3, page: 2, limit: 2 });
+      expect(second.body.items.map((item: { id: string }) => item.id)).toEqual([
+        laptop,
+      ]);
+    });
+
+    it.each([
+      '?limit=101',
+      '?limit=0',
+      '?page=0',
+      '?page=two',
+      '?sort=title',
+      '?order=up',
+      '?status=PENDING',
+      '?requesterId=not-a-uuid',
+      '?tenantId=0',
+    ])('rejects %s', async (query) => {
+      await as(ike).get(`/purchase-requests${query}`).expect(400);
+    });
   });
 });

@@ -91,6 +91,11 @@ describe('Swagger (e2e)', () => {
     const responses = (path: string, method: string) =>
       Object.keys(doc.paths[`/api/v1${path}`][method].responses).sort();
 
+    expect(responses('/purchase-requests', 'get')).toEqual([
+      '200',
+      '400',
+      '401',
+    ]);
     expect(responses('/purchase-requests', 'post')).toEqual([
       '201',
       '400',

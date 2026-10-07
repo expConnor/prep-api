@@ -77,6 +77,7 @@ Every endpoint needs a bearer token and only ever touches the caller's tenant.
 
 | Endpoint                              | What it does                                                       |
 | ------------------------------------- | ------------------------------------------------------------------ |
+| `GET /purchase-requests`              | List the requests you can see                                      |
 | `POST /purchase-requests`             | Create a draft owned by the caller                                 |
 | `GET /purchase-requests/:id`          | Get one request                                                    |
 | `GET /purchase-requests/:id/audit`    | The request's audit history, oldest first                          |
@@ -95,6 +96,21 @@ curl -X POST http://localhost:3000/api/v1/purchase-requests \
 ```
 
 Drafts are visible only to their owner. Requesters see only their own requests; approvers and admins also see everyone else's submitted, approved and rejected ones. A request the caller can't see, including one in another tenant, returns 404 as if it didn't exist. Acting on a visible request that isn't yours returns 403, and editing or deleting one that is no longer a draft returns 409.
+
+The list returns `{ items, total, page, limit }`. Query parameters, all optional:
+
+| Parameter     | Meaning                                               |
+| ------------- | ----------------------------------------------------- |
+| `status`      | `DRAFT`, `SUBMITTED`, `APPROVED` or `REJECTED`        |
+| `requesterId` | Only this requester's requests                        |
+| `vendor`      | Whole vendor name in any case (`dell` matches `Dell`) |
+| `q`           | Text in the title, in any case                        |
+| `sort`        | `createdAt` (default) or `amount`                     |
+| `order`       | `desc` (default) or `asc`                             |
+| `page`        | Page number, from 1 (default 1)                       |
+| `limit`       | Page size, 1 to 100 (default 20)                      |
+
+Filters only narrow what you can already see, so filtering by `status=DRAFT` never shows other people's drafts.
 
 A request moves `DRAFT → SUBMITTED → APPROVED | REJECTED`, and approved and rejected are final. Nobody can approve or reject their own request (403). Any other transition returns 409, including the loser when two people decide the same request at once. Every change is written to the audit log in the same transaction.
 
