@@ -98,6 +98,16 @@ describe('Swagger (e2e)', () => {
       '401',
       '404',
     ]);
+    for (const method of ['patch', 'delete']) {
+      expect(responses('/purchase-requests/{id}', method)).toEqual([
+        method === 'patch' ? '200' : '204',
+        '400',
+        '401',
+        '403',
+        '404',
+        '409',
+      ]);
+    }
     expect(doc.paths['/api/v1/purchase-requests'].post.security).toEqual([
       { bearer: [] },
     ]);

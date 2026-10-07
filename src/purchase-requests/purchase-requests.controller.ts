@@ -1,8 +1,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
+  Patch,
   ParseUUIDPipe,
   Post,
   UseGuards,
@@ -10,7 +13,10 @@ import {
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiConflictResponse,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -20,6 +26,7 @@ import {
 import { AuthGuard, type AuthUser } from '../auth/auth.guard.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { CreatePurchaseRequestDto } from './dto/create-purchase-request.dto.js';
+import { UpdatePurchaseRequestDto } from './dto/update-purchase-request.dto.js';
 import { PurchaseRequestsService } from './purchase-requests.service.js';
 
 @ApiTags('purchase-requests')
@@ -53,5 +60,41 @@ export class PurchaseRequestsController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.service.findOne(user, id);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Edit your own draft' })
+  @ApiOkResponse({ description: 'Returns the updated request' })
+  @ApiBadRequestResponse({
+    description: 'The id is not a UUID, or invalid or unknown fields',
+  })
+  @ApiForbiddenResponse({ description: "The request isn't the caller's" })
+  @ApiNotFoundResponse({
+    description: "Doesn't exist, or the caller can't see it",
+  })
+  @ApiConflictResponse({ description: 'The request is no longer a draft' })
+  update(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdatePurchaseRequestDto,
+  ) {
+    return this.service.update(user, id, body);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Delete your own draft' })
+  @ApiNoContentResponse({ description: 'Deleted' })
+  @ApiBadRequestResponse({ description: 'The id is not a UUID' })
+  @ApiForbiddenResponse({ description: "The request isn't the caller's" })
+  @ApiNotFoundResponse({
+    description: "Doesn't exist, or the caller can't see it",
+  })
+  @ApiConflictResponse({ description: 'The request is no longer a draft' })
+  remove(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.service.remove(user, id);
   }
 }

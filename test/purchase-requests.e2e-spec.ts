@@ -88,6 +88,9 @@ describe('Purchase requests (e2e)', () => {
       get: (path: string) => auth(server.get(`/api/v1${path}`)),
       post: (path: string, body?: object) =>
         auth(server.post(`/api/v1${path}`)).send(body),
+      patch: (path: string, body?: object) =>
+        auth(server.patch(`/api/v1${path}`)).send(body),
+      delete: (path: string) => auth(server.delete(`/api/v1${path}`)),
     };
   }
 
@@ -225,6 +228,145 @@ describe('Purchase requests (e2e)', () => {
 
     it('rejects an id that is not a uuid', async () => {
       await as(rita).get('/purchase-requests/not-a-uuid').expect(400);
+    });
+  });
+
+  describe('PATCH /purchase-requests/:id', () => {
+    it('lets the owner edit their draft', async () => {
+      const draft = await createRequest(rita);
+
+      const res = await as(rita)
+        .patch(`/purchase-requests/${draft.id}`, { amount: 99900 })
+        .expect(200);
+
+      expect(res.body).toMatchObject({ ...validBody, amount: 99900 });
+    });
+
+    it('clears the description when it is set to null', async () => {
+      const draft = await createRequest(rita);
+
+      const res = await as(rita)
+        .patch(`/purchase-requests/${draft.id}`, { description: null })
+        .expect(200);
+
+      expect(res.body.description).toBeNull();
+    });
+
+    it('records the before and after in the audit log', async () => {
+      const draft = await createRequest(rita);
+      const before = (
+        await as(rita).get(`/purchase-requests/${draft.id}`).expect(200)
+      ).body;
+
+      const after = (
+        await as(rita)
+          .patch(`/purchase-requests/${draft.id}`, { title: 'Monitor' })
+          .expect(200)
+      ).body;
+
+      const entries = await prisma.auditLogEntry.findMany({
+        where: { entityId: draft.id },
+      });
+      expect(entries).toEqual([
+        expect.objectContaining({
+          actorId: rita.id,
+          action: 'PURCHASE_REQUEST_UPDATED',
+          changes: { before, after },
+        }),
+      ]);
+    });
+
+    it("forbids editing someone else's request", async () => {
+      const submitted = await createRequest(rita, 'SUBMITTED');
+
+      await as(abe)
+        .patch(`/purchase-requests/${submitted.id}`, { title: 'Mine now' })
+        .expect(403);
+    });
+
+    it('refuses to edit a request that is no longer a draft', async () => {
+      const submitted = await createRequest(rita, 'SUBMITTED');
+
+      await as(rita)
+        .patch(`/purchase-requests/${submitted.id}`, { title: 'Changed' })
+        .expect(409);
+    });
+
+    it("hides another tenant's request", async () => {
+      const draft = await createRequest(rita);
+
+      await as(gus)
+        .patch(`/purchase-requests/${draft.id}`, { title: 'Changed' })
+        .expect(404);
+    });
+
+    it.each([
+      ['a status', { status: 'APPROVED' }],
+      ['a requester id', { requesterId: '0' }],
+      ['a zero amount', { amount: 0 }],
+      ['a blank title', { title: ' ' }],
+    ])('rejects %s', async (_, body) => {
+      const draft = await createRequest(rita);
+
+      await as(rita).patch(`/purchase-requests/${draft.id}`, body).expect(400);
+    });
+
+    it('leaves the request unchanged when it refuses', async () => {
+      const submitted = await createRequest(rita, 'SUBMITTED');
+
+      await as(rita)
+        .patch(`/purchase-requests/${submitted.id}`, { title: 'Changed' })
+        .expect(409);
+
+      expect(
+        await prisma.purchaseRequest.findUnique({
+          where: { id: submitted.id },
+        }),
+      ).toEqual(submitted);
+      expect(
+        await prisma.auditLogEntry.count({ where: { entityId: submitted.id } }),
+      ).toBe(0);
+    });
+  });
+
+  describe('DELETE /purchase-requests/:id', () => {
+    it('lets the owner delete their draft and records it', async () => {
+      const draft = await createRequest(rita);
+      const before = (
+        await as(rita).get(`/purchase-requests/${draft.id}`).expect(200)
+      ).body;
+
+      await as(rita).delete(`/purchase-requests/${draft.id}`).expect(204);
+
+      await as(rita).get(`/purchase-requests/${draft.id}`).expect(404);
+      const entries = await prisma.auditLogEntry.findMany({
+        where: { entityId: draft.id },
+      });
+      expect(entries).toEqual([
+        expect.objectContaining({
+          actorId: rita.id,
+          action: 'PURCHASE_REQUEST_DELETED',
+          changes: { before, after: null },
+        }),
+      ]);
+    });
+
+    it("forbids deleting someone else's request", async () => {
+      const submitted = await createRequest(rita, 'SUBMITTED');
+
+      await as(ada).delete(`/purchase-requests/${submitted.id}`).expect(403);
+    });
+
+    it('refuses to delete a request that is no longer a draft', async () => {
+      const submitted = await createRequest(rita, 'SUBMITTED');
+
+      await as(rita).delete(`/purchase-requests/${submitted.id}`).expect(409);
+    });
+
+    it("hides someone else's draft", async () => {
+      const draft = await createRequest(rita);
+
+      await as(ada).delete(`/purchase-requests/${draft.id}`).expect(404);
     });
   });
 });
