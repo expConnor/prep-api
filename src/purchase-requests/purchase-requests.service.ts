@@ -47,17 +47,30 @@ export class PurchaseRequestsService {
   }
 
   update(user: AuthUser, id: string, body: UpdatePurchaseRequestDto) {
-    return this.prisma.$transaction(async (tx) => {
-      const before = await findActionable(tx, user, id, 'edit');
-      // Conditional on the status just read, so a concurrent submit makes
-      // this match nothing instead of editing a submitted request.
-      const [after] = await tx.purchaseRequest.updateManyAndReturn({
-        where: { id, tenantId: user.tenantId, status: before.status },
-        data: body,
-      });
-      if (!after) throw new ConflictException();
-      await audit(tx, user, 'PURCHASE_REQUEST_UPDATED', id, { before, after });
-      return after;
+    return this.change(user, id, 'edit', 'PURCHASE_REQUEST_UPDATED', body);
+  }
+
+  submit(user: AuthUser, id: string) {
+    return this.change(user, id, 'submit', 'PURCHASE_REQUEST_SUBMITTED', {
+      status: 'SUBMITTED',
+      submittedAt: new Date(),
+    });
+  }
+
+  approve(user: AuthUser, id: string) {
+    return this.change(user, id, 'approve', 'PURCHASE_REQUEST_APPROVED', {
+      status: 'APPROVED',
+      decidedById: user.id,
+      decidedAt: new Date(),
+    });
+  }
+
+  reject(user: AuthUser, id: string, reason: string) {
+    return this.change(user, id, 'reject', 'PURCHASE_REQUEST_REJECTED', {
+      status: 'REJECTED',
+      decidedById: user.id,
+      decidedAt: new Date(),
+      rejectionReason: reason,
     });
   }
 
@@ -72,6 +85,27 @@ export class PurchaseRequestsService {
         before,
         after: null,
       });
+    });
+  }
+
+  private change(
+    user: AuthUser,
+    id: string,
+    action: Action,
+    auditAction: AuditAction,
+    data: Prisma.PurchaseRequestUncheckedUpdateManyInput,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const before = await findActionable(tx, user, id, action);
+      // Conditional on the status just read: if someone else changed it in
+      // the meantime, this matches nothing and the caller gets a 409.
+      const [after] = await tx.purchaseRequest.updateManyAndReturn({
+        where: { id, tenantId: user.tenantId, status: before.status },
+        data,
+      });
+      if (!after) throw new ConflictException();
+      await audit(tx, user, auditAction, id, { before, after });
+      return after;
     });
   }
 }

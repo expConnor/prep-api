@@ -75,12 +75,15 @@ The user is reloaded on every request, so a deleted user is locked out and a rol
 
 Every endpoint needs a bearer token and only ever touches the caller's tenant.
 
-| Endpoint                        | What it does                                       |
-| ------------------------------- | -------------------------------------------------- |
-| `POST /purchase-requests`       | Create a draft owned by the caller                 |
-| `GET /purchase-requests/:id`    | Get one request                                    |
-| `PATCH /purchase-requests/:id`  | Edit your own draft; `description: null` clears it |
-| `DELETE /purchase-requests/:id` | Delete your own draft                              |
+| Endpoint                              | What it does                                                       |
+| ------------------------------------- | ------------------------------------------------------------------ |
+| `POST /purchase-requests`             | Create a draft owned by the caller                                 |
+| `GET /purchase-requests/:id`          | Get one request                                                    |
+| `PATCH /purchase-requests/:id`        | Edit your own draft; `description: null` clears it                 |
+| `DELETE /purchase-requests/:id`       | Delete your own draft                                              |
+| `POST /purchase-requests/:id/submit`  | Submit your own draft for approval                                 |
+| `POST /purchase-requests/:id/approve` | Approve someone else's submitted request (approvers and admins)    |
+| `POST /purchase-requests/:id/reject`  | Reject someone else's submitted request with `{ "reason": "..." }` |
 
 `amount` is an integer in minor units (cents for EUR) and `currency` an uppercase ISO 4217 code:
 
@@ -90,7 +93,9 @@ curl -X POST http://localhost:3000/api/v1/purchase-requests \
   -d '{"title":"Laptop","vendor":"Dell","amount":129900,"currency":"EUR"}'
 ```
 
-Drafts are visible only to their owner. Requesters see only their own requests; approvers and admins also see everyone else's submitted, approved and rejected ones. A request the caller can't see, including one in another tenant, returns 404 as if it didn't exist. Acting on a visible request that isn't yours returns 403, and editing or deleting one that is no longer a draft returns 409. Every change is written to the audit log in the same transaction.
+Drafts are visible only to their owner. Requesters see only their own requests; approvers and admins also see everyone else's submitted, approved and rejected ones. A request the caller can't see, including one in another tenant, returns 404 as if it didn't exist. Acting on a visible request that isn't yours returns 403, and editing or deleting one that is no longer a draft returns 409.
+
+A request moves `DRAFT → SUBMITTED → APPROVED | REJECTED`, and approved and rejected are final. Nobody can approve or reject their own request (403). Any other transition returns 409, including the loser when two people decide the same request at once. Every change is written to the audit log in the same transaction.
 
 ## Scripts
 

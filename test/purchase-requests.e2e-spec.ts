@@ -369,4 +369,237 @@ describe('Purchase requests (e2e)', () => {
       await as(ada).delete(`/purchase-requests/${draft.id}`).expect(404);
     });
   });
+
+  describe('POST /purchase-requests/:id/submit', () => {
+    it('lets the owner submit their draft and records it', async () => {
+      const draft = await createRequest(rita);
+      const before = (
+        await as(rita).get(`/purchase-requests/${draft.id}`).expect(200)
+      ).body;
+
+      const after = (
+        await as(rita).post(`/purchase-requests/${draft.id}/submit`).expect(200)
+      ).body;
+
+      expect(after).toMatchObject({
+        status: 'SUBMITTED',
+        submittedAt: expect.any(String),
+      });
+      const entries = await prisma.auditLogEntry.findMany({
+        where: { entityId: draft.id },
+      });
+      expect(entries).toEqual([
+        expect.objectContaining({
+          actorId: rita.id,
+          action: 'PURCHASE_REQUEST_SUBMITTED',
+          changes: { before, after },
+        }),
+      ]);
+    });
+
+    it("forbids submitting someone else's request", async () => {
+      const submitted = await createRequest(rita, 'SUBMITTED');
+
+      await as(abe)
+        .post(`/purchase-requests/${submitted.id}/submit`)
+        .expect(403);
+    });
+
+    it('refuses to submit a request twice', async () => {
+      const submitted = await createRequest(rita, 'SUBMITTED');
+
+      await as(rita)
+        .post(`/purchase-requests/${submitted.id}/submit`)
+        .expect(409);
+    });
+
+    it("hides someone else's draft", async () => {
+      const draft = await createRequest(rita);
+
+      await as(ada).post(`/purchase-requests/${draft.id}/submit`).expect(404);
+    });
+  });
+
+  describe('POST /purchase-requests/:id/approve', () => {
+    it("lets an approver approve someone else's request and records it", async () => {
+      const submitted = await createRequest(rita, 'SUBMITTED');
+      const before = (
+        await as(abe).get(`/purchase-requests/${submitted.id}`).expect(200)
+      ).body;
+
+      const after = (
+        await as(abe)
+          .post(`/purchase-requests/${submitted.id}/approve`)
+          .expect(200)
+      ).body;
+
+      expect(after).toMatchObject({
+        status: 'APPROVED',
+        decidedById: abe.id,
+        decidedAt: expect.any(String),
+        rejectionReason: null,
+      });
+      const entries = await prisma.auditLogEntry.findMany({
+        where: { entityId: submitted.id },
+      });
+      expect(entries).toEqual([
+        expect.objectContaining({
+          actorId: abe.id,
+          action: 'PURCHASE_REQUEST_APPROVED',
+          changes: { before, after },
+        }),
+      ]);
+    });
+
+    it("lets an admin approve someone else's request", async () => {
+      const submitted = await createRequest(rita, 'SUBMITTED');
+
+      await as(ada)
+        .post(`/purchase-requests/${submitted.id}/approve`)
+        .expect(200);
+    });
+
+    it.each([
+      ['a requester', 'rita'],
+      ['an approver', 'abe'],
+      ['an admin', 'ada'],
+    ])('forbids %s from approving their own request', async (_, name) => {
+      const owner = { rita, abe, ada }[name]!;
+      const submitted = await createRequest(owner, 'SUBMITTED');
+
+      await as(owner)
+        .post(`/purchase-requests/${submitted.id}/approve`)
+        .expect(403);
+    });
+
+    it('refuses to approve a draft', async () => {
+      const draft = await createRequest(abe);
+
+      await as(abe).post(`/purchase-requests/${draft.id}/approve`).expect(403);
+      await as(ada).post(`/purchase-requests/${draft.id}/approve`).expect(404);
+    });
+
+    it.each(['approve', 'reject'])(
+      'refuses to %s a request that is already decided',
+      async (action) => {
+        const submitted = await createRequest(rita, 'SUBMITTED');
+        await as(abe)
+          .post(`/purchase-requests/${submitted.id}/approve`)
+          .expect(200);
+
+        await as(ada)
+          .post(`/purchase-requests/${submitted.id}/${action}`, {
+            reason: 'Too late',
+          })
+          .expect(409);
+      },
+    );
+
+    it("hides another tenant's request", async () => {
+      const submitted = await createRequest(rita, 'SUBMITTED');
+
+      await as(gus)
+        .post(`/purchase-requests/${submitted.id}/approve`)
+        .expect(404);
+    });
+  });
+
+  describe('POST /purchase-requests/:id/reject', () => {
+    it('rejects with a reason and records it', async () => {
+      const submitted = await createRequest(rita, 'SUBMITTED');
+      const before = (
+        await as(abe).get(`/purchase-requests/${submitted.id}`).expect(200)
+      ).body;
+
+      const after = (
+        await as(abe)
+          .post(`/purchase-requests/${submitted.id}/reject`, {
+            reason: 'Over budget',
+          })
+          .expect(200)
+      ).body;
+
+      expect(after).toMatchObject({
+        status: 'REJECTED',
+        rejectionReason: 'Over budget',
+        decidedById: abe.id,
+        decidedAt: expect.any(String),
+      });
+      const entries = await prisma.auditLogEntry.findMany({
+        where: { entityId: submitted.id },
+      });
+      expect(entries).toEqual([
+        expect.objectContaining({
+          actorId: abe.id,
+          action: 'PURCHASE_REQUEST_REJECTED',
+          changes: { before, after },
+        }),
+      ]);
+    });
+
+    it.each([
+      ['a missing reason', {}],
+      ['a blank reason', { reason: '  ' }],
+      ['an over-long reason', { reason: 'x'.repeat(2001) }],
+    ])('rejects %s', async (_, body) => {
+      const submitted = await createRequest(rita, 'SUBMITTED');
+
+      await as(abe)
+        .post(`/purchase-requests/${submitted.id}/reject`, body)
+        .expect(400);
+    });
+
+    it('forbids rejecting your own request', async () => {
+      const submitted = await createRequest(abe, 'SUBMITTED');
+
+      await as(abe)
+        .post(`/purchase-requests/${submitted.id}/reject`, { reason: 'No' })
+        .expect(403);
+    });
+  });
+
+  describe('concurrent decisions', () => {
+    // Holding a row lock lets both requests read SUBMITTED and pass the policy
+    // check, then queue on their UPDATE. Releasing it lets them write one after
+    // the other, which is the race the conditional update has to survive.
+    it('lets only one of an approve and a reject at the same time succeed', async () => {
+      const submitted = await createRequest(rita, 'SUBMITTED');
+
+      let both!: Promise<request.Response[]>;
+      await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "PurchaseRequest" WHERE id = ${submitted.id}::uuid FOR UPDATE`;
+        both = Promise.all([
+          as(abe).post(`/purchase-requests/${submitted.id}/approve`),
+          as(ada).post(`/purchase-requests/${submitted.id}/reject`, {
+            reason: 'Over budget',
+          }),
+        ]);
+        await waitForLockWaiters(2);
+      });
+      const [approve, reject] = await both;
+
+      expect([approve.status, reject.status].sort((a, b) => a - b)).toEqual([
+        200, 409,
+      ]);
+      const winner = approve.status === 200 ? approve : reject;
+      const stored = await prisma.purchaseRequest.findUniqueOrThrow({
+        where: { id: submitted.id },
+      });
+      expect(stored.status).toBe(winner.body.status);
+      expect(
+        await prisma.auditLogEntry.count({ where: { entityId: submitted.id } }),
+      ).toBe(1);
+    });
+
+    async function waitForLockWaiters(count: number) {
+      for (let attempt = 0; attempt < 200; attempt++) {
+        const [{ waiting }] = await prisma.$queryRaw<{ waiting: number }[]>`
+          SELECT count(*)::int AS waiting FROM pg_stat_activity
+          WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+        if (waiting >= count) return;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      throw new Error(`Expected ${count} queries waiting on a lock`);
+    }
+  });
 });

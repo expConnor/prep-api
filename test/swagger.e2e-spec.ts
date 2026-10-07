@@ -44,6 +44,9 @@ describe('Swagger (e2e)', () => {
       '/api/v1/health',
       '/api/v1/purchase-requests',
       '/api/v1/purchase-requests/{id}',
+      '/api/v1/purchase-requests/{id}/approve',
+      '/api/v1/purchase-requests/{id}/reject',
+      '/api/v1/purchase-requests/{id}/submit',
     ]);
   });
 
@@ -108,6 +111,16 @@ describe('Swagger (e2e)', () => {
         '409',
       ]);
     }
+    for (const action of ['submit', 'approve', 'reject']) {
+      expect(responses(`/purchase-requests/{id}/${action}`, 'post')).toEqual([
+        '200',
+        '400',
+        '401',
+        '403',
+        '404',
+        '409',
+      ]);
+    }
     expect(doc.paths['/api/v1/purchase-requests'].post.security).toEqual([
       { bearer: [] },
     ]);
@@ -125,6 +138,10 @@ describe('Swagger (e2e)', () => {
         amount: { type: 'integer' },
         currency: { type: 'string' },
       },
+    });
+    expect(doc.components.schemas.RejectPurchaseRequestDto).toMatchObject({
+      required: ['reason'],
+      properties: { reason: { type: 'string' } },
     });
   });
 });
